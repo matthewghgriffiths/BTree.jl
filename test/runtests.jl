@@ -20,5 +20,9 @@ using Test
     insert!(node, 2, 1)
     @show node
     @show BTree.split(node)
+
+    @show findfirst(x -> x > -1, keys(node))
+    @show findfirst(x -> x > 1, keys(node))
+    @show findfirst(x -> x > 2, keys(node))
 end
 
