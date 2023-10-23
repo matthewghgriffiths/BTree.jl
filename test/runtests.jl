@@ -1,28 +1,14 @@
 using BTree
 using Test
+using AbstractTrees
 
 @testset "BTree.jl" begin
-    node = BTree.B⁺Node{Int, Int}(5)
-    @show(node)
-    @test BTree.order(node) == 5
-    @test length(node) == 0 
-
-    tree = BTree.B⁺Tree{Int, Int}(10)
-    @test BTree.order(tree) == 10
-    @test length(tree) == 0 
-
-    insert!(node, 1, 2)
-    @show node
-    insert!(node, 1, 3)
-    @show node
-    insert!(node, 0, 4)
-    @show node
-    insert!(node, 2, 1)
-    @show node
-    @show BTree.split(node)
-
-    @show findfirst(x -> x > -1, keys(node))
-    @show findfirst(x -> x > 1, keys(node))
-    @show findfirst(x -> x > 2, keys(node))
+	tree =  BTree.B⁺Tree{Int, Int}(5)
+	for i in 1:200
+		k, v = rand(1:1000), rand(1:100)
+		tree[k] = v
+		leaf_keys = AbstractTrees.Leaves(tree.root) .|> keys .|> collect |> x -> reduce(vcat, x)
+		@test issorted(leaf_keys)
+    end
 end
 
