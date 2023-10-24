@@ -4,11 +4,17 @@ using AbstractTrees
 
 @testset "BTree.jl" begin
 	tree =  BTree.B⁺Tree{Int, Int}(5)
+	data = Dict{Int, Int}()
 	for i in 1:200
 		k, v = rand(1:1000), rand(1:100)
 		tree[k] = v
-		leaf_keys = AbstractTrees.Leaves(tree.root) .|> keys .|> collect |> x -> reduce(vcat, x)
-		@test issorted(leaf_keys)
+		data[k] = v
+
+		@test BTree.test_b⁺tree(tree)
+		@test all(
+			(data[k] == v) 
+			for (k, v) in pairs(tree)
+		)
     end
 end
 

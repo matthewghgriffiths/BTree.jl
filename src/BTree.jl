@@ -1,8 +1,9 @@
 module BTree
 
-import Base: insert!, keys, values, length, isempty, setindex!, eltype
+import Base: insert!, keys, values, pairs, length, isempty, setindex!, eltype
 # using DataStructures: MutableLinkedList
 import AbstractTrees
+using IterTools
 
 # Write your package code here.
 
@@ -24,7 +25,7 @@ end
 
 B⁺Node{K, V}(order::Integer) where {K, V} = B⁺Node{K, V, order}(K[], V[]) 
 B⁺Node(pair::Pair) = B⁺Node(pair...)
-B⁺Node(left::B⁺Node, right::Nothing) = left 
+B⁺Node(left::B⁺Node, ::Nothing) = left
 function B⁺Node(left::B⁺Node{K, V, N}, right::B⁺Node{K, V, N}) where {K, V, N}
     B⁺Node{K, V, N}(
         [first(keys(left)), first(keys(right))], 
@@ -44,8 +45,12 @@ ischild(node::AbstractB⁺Node) = !isinternal(node)
 
 AbstractTrees.children(node::AbstractBNode) = ischild(node) ? () : values(node)
 AbstractTrees.nodevalue(node::AbstractBNode{K, V, N}) where {K, V, N} = ischild(node) ? collect(pairs(node)) : keys(node)
+AbstractTrees.NodeType(::Type{<:AbstractBNode}) = AbstractTrees.HasNodeType()
+AbstractTrees.nodetype(::Type{<:AbstractBNode}) = AbstractBNode
+AbstractTrees.nodetype(::Type{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Node{K, V, N}
 
 order(::B⁺Node{K, V, N}) where {K, V, N} = N
+# eltype(::B⁺Node{K, V, N}) where {K, V, N} = V
 
 for f in [:length, :isempty, :iterate, :eltype]
     @eval $f(node::B⁺Node) = $f(values(node))
@@ -69,6 +74,11 @@ function B⁺Tree{K, V}(order::Integer) where {K, V}
 end
 order(::B⁺Tree{K, V, N}) where {K, V, N} = N
 length(tree::B⁺Tree) = sum(length, tree.leaves)
+
+leaves(tree::B⁺Tree) = AbstractTrees.Leaves(tree.root)
+Base.keys(tree::B⁺Tree)   = Iterators.flatten(keys.(leaves(tree)))
+Base.values(tree::B⁺Tree) = Iterators.flatten(values.(leaves(tree)))
+Base.pairs(tree::B⁺Tree)  = Iterators.flatten(pairs.(leaves(tree)))
 
 function update(node::AbstractB⁺Node, value, key)
     ks = keys(node)
@@ -113,6 +123,13 @@ end
 function setindex!(tree::B⁺Tree, value, key)
     tree.root = B⁺Node(update(tree.root, value, key))
     tree
+end
+
+
+function test_b⁺tree(tree)
+    leaf_keys = AbstractTrees.Leaves(tree.root) .|> keys .|> collect |> x -> reduce(vcat, x)
+    @assert all(leaf_keys[2:end] .> leaf_keys[1:end-1])
+    true
 end
 
 end
