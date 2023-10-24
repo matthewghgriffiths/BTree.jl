@@ -1,6 +1,6 @@
 module BTree
 
-import Base: insert!, keys, values, pairs, length, isempty, setindex!, eltype
+import Base: insert!, keys, values, pairs, length, isempty, setindex!, eltype, getindex
 # using DataStructures: MutableLinkedList
 import AbstractTrees
 using IterTools
@@ -32,7 +32,6 @@ function B⁺Internal(keys::Vector, nodes::Vector{<:B⁺Node{K, V, N}}) where {K
     nodes = convert(Vector{B⁺Node{K, V, N}}, nodes)
     B⁺Internal(keys, nodes)
 end
-# B⁺Internal(keys::Vector{V}, nodes::Vector{B⁺Node{K, V, N}}) where {K, V, N} = B⁺Internal{K, V, N}(keys, nodes)
 B⁺Internal(nodes::Vector{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Internal(first.(keys.(nodes)), nodes)
 B⁺Internal{N}(keys::Vector, nodes::Vector{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Internal(keys, nodes)
 
@@ -59,19 +58,6 @@ B⁺Node(keys::Vector{K}, values::Vector{V}, order::Int) where {K, V} = B⁺Node
 B⁺Node(nodes::Vector{<:B⁺Node}) = B⁺Internal(nodes)
 B⁺Node(nodes::Vararg{B⁺Node{K, V, N}, M}) where {K, V, N, M} = B⁺Node(collect(nodes))
 
-# struct B⁺Node{K, V, N} <: AbstractB⁺Node{K, V, N}
-#     keys::Vector{K}
-#     values::Union{Vector{B⁺Node{K, V, N}}, Vector{V}}
-# end
-# B⁺Node(pair::Pair) = B⁺Node(pair...)
-# B⁺Node(left::B⁺Node, ::Nothing) = left
-# function B⁺Node(left::B⁺Node{K, V, N}, right::B⁺Node{K, V, N}) where {K, V, N}
-#     B⁺Node{K, V, N}(
-#         [first(keys(left)), first(keys(right))], 
-#         [left, right]
-#     )
-# end
-
 Base.sizehint!(node::AbstractBNode) = begin
     sizehint!(keys(node))
     sizehint!(values(node))
@@ -83,8 +69,6 @@ isinternal(node::B⁺Internal) = true
 isinternal(node::B⁺Child) = false
 ischild(node::B⁺Internal) = false
 ischild(node::B⁺Child) = true
-# isinternal(node::B⁺Node) = eltype(node) <: B⁺Node
-# ischild(node::B⁺Node) = !isinternal(node)
 
 AbstractTrees.children(node::AbstractBNode) = ischild(node) ? () : values(node)
 AbstractTrees.nodevalue(node::AbstractBNode{K, V, N}) where {K, V, N} = ischild(node) ? collect(pairs(node)) : keys(node)
@@ -104,6 +88,13 @@ function insert!(node::AbstractBNode, i, key, value)
     insert!(keys(node), i, key)
     insert!(values(node), i, value)
     return node 
+end
+
+function Base.getindex(node::AbstractBNode, key)
+    ks = keys(node)
+    i = searchsortedfirst(ks, key)
+    ks[i] == key && KeyError(key)
+    values(node)[i]
 end
 
 mutable struct B⁺Tree{K, V, N}
@@ -185,6 +176,22 @@ function setindex!(tree::B⁺Tree, value, key)
     tree
 end
 
+function drop(node, key)
+    ks = keys(node)
+    i = searchsortedlast(@view(ks[2:end]), key) + 1
+    ks[i], values(node)[i]
+end
+
+function Base.getindex(tree::B⁺Tree{K, V, N}, key) where {K, V, N}
+	node = tree.root
+    node_key = key
+	while isa(node, AbstractBNode)
+		node_key, node = drop(node, key)
+	end
+    node_key == key || throw(KeyError(key))
+    node 
+end
+
 function test_b⁺tree_key_order(tree)
     leaf_keys = keys(tree) |> collect
     @assert all(leaf_keys[2:end] .> leaf_keys[1:end-1])
@@ -193,6 +200,7 @@ end
 function test_b⁺tree(tree, data)
     test_b⁺tree_key_order(tree)
     @assert all((data[k] == v) for (k, v) in pairs(tree))
+    @assert all((tree[k] == v) for (k, v) in pairs(data))
     @assert length(data) == length(tree)
     true
 end
