@@ -10,11 +10,7 @@ using AbstractTrees
 		tree[k] = v
 		data[k] = v
 
-		@test BTree.test_b⁺tree(tree)
-		@test all(
-			(data[k] == v) 
-			for (k, v) in pairs(tree)
-		)
+		@test BTree.test_b⁺tree(tree, data)
     end
 end
 
