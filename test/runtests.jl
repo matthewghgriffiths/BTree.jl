@@ -1,16 +1,32 @@
 using BTree
 using Test
 using AbstractTrees
+using Random
 
-@testset "BTree.jl" begin
-	tree =  BTree.B⁺Tree{Int, Int}(5)
-	data = Dict{Int, Int}()
-	for i in 1:200
-		k, v = rand(1:1000), rand(1:100)
-		tree[k] = v
-		data[k] = v
 
-		@test BTree.test_b⁺tree(tree, data)
-    end
+@testset "B⁺Tree" begin
+	rng = MersenneTwister(1337)
+	n_keys = 200
+	kvs = Pair.(rand(rng, 1:n_keys, n_keys), rand(rng, 1:n_keys, n_keys))
+
+	tree_sizes = [2, 3, 10, 11]
+	for N in tree_sizes
+		tree =  BTree.B⁺Tree{Int, Int}(10)
+		data = Dict{Int, Int}()
+		for (k, v) in kvs
+			tree[k] = v
+			data[k] = v
+			@test BTree.test_b⁺tree(tree, data)
+		end
+
+		ks = keys(tree) |> collect
+		ks = ks[randperm(rng, length(ks))]
+
+		for k in ks
+			delete!(data, k)
+			delete!(tree, k)
+			@test BTree.test_b⁺tree(tree, data)
+		end
+	end
 end
 

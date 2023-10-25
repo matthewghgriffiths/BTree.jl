@@ -79,10 +79,11 @@ Base.pairs(tree::B⁺Tree)  = Iterators.flatten(pairs.(leaves(tree)))
 
 function setindex!(node::B⁺Internal{K, V, N}, value, key) where {K, V, N} 
     ks = keys(node)
+    i, k = indexkey(node, key)
+    (key < k) && (ks[i] = key)
     nodes = values(node)
-    i = index(ks, key)
-    (key < ks[i]) && (ks[i] = key)
-    nodes[i], children... = split(setindex!(nodes[i], value, key))
+    child = setindex!(nodes[i], value, key)
+    nodes[i], children = split(child)
     for (j, childⱼ) in enumerate(children)
         insert!(node, i + j, childⱼ, first(keys(childⱼ)))
     end
@@ -91,10 +92,8 @@ end
 
 function setindex!(node::B⁺Child{K, V, N}, value, key) where {K, V, N} 
     isempty(node) && return push!(node, value, key)
-    ks = keys(node)
     vs = values(node)
-    i = index(ks, key)
-    k = ks[i]
+    i, k = indexkey(node, key)
     if k == key 
         vs[i] = value 
     else
@@ -103,40 +102,42 @@ function setindex!(node::B⁺Child{K, V, N}, value, key) where {K, V, N}
     node
 end
 
-function split(node::B⁺Node{K, V, N}, splitsize::Integer, maxsize::Integer) where {K, V, N}
-    ks = keys(node)
-    vs = values(node)
-    inds = eachindex(ks)
-    stop_index = lastindex(inds)
+function split(node::B, splitsize::Integer, maxsize::Integer) where {B <: B⁺Node}
+    stop_index = lastindex(keys(node))
     stop = stop_index - maxsize + 1
-    nsplits = cld(length(node), minsize(node)) - 1
-    i = 1 
-    nodes = B⁺Node{K, V, N}[]
-    sizehint!(node, nsplits)
+    nsplits = fld(length(node), minsize(node))
+    # nodes = B[]
+    # sizehint!(node, nsplits)
+    nodes = Vector{B}(undef, nsplits - 1)
+
+    i = firstindex(keys(node))
+    left = node[i:i + splitsize - 1]
+    i += splitsize
+    j = 1
     while i < stop
-        sel = i:i + splitsize - 1
-        push!(nodes, node[sel])
+        nodes[j] = node[i:i + splitsize - 1]
         i += splitsize
+        j += 1
     end
     if i < stop_index
-        sel = i:stop_index
-        push!(nodes, node[sel])
+        nodes[j] = node[i:stop_index]
     end
-    return nodes 
+    return left, nodes 
 end
 
-function split(node::B⁺Node{K, V, N}) where {K, V, N}
-    isover(node) || return B⁺Node{K, V, N}[node]
+function split(node::B) where {B <: B⁺Node}
+    # isover(node) || return B⁺Node{K, V, N}[node]
+    isover(node) || return node, B[]
     split(node, minsize(node), order(node))
 end
 
 function setindex!(tree::B⁺Tree, value, key)
-    node = setindex!(tree.root, value, key)
-    nodes = split(node)
-    if length(nodes) == 1
-        tree.root, = nodes
+    node= setindex!(tree.root, value, key)
+    node, children = split(node)
+    if isempty(children)
+        tree.root = node
     else
-        tree.root = B⁺Node(nodes)
+        tree.root = B⁺Node(vcat(node, children))
     end
     tree
 end
@@ -176,22 +177,11 @@ function search(node::AbstractBNode{K, V, N}, key) where {K, V, N}
     isa(next, V) ? (ks[i] => next) : search(next, key)
 end
 
-# function search(node::AbstractBNode, key)
-#     ks = keys(node)
-#     i = searchsortedlast(@view(ks[2:end]), key) + 1
-#     i, values(node)[i]
-# end
-
 function Base.getindex(node::AbstractBNode, key)
     i = index(node, key)
     keys(node)[i] == key || throw(KeyError(key))
     values(node)[i]
 end
-
-# function drop(node::AbstractBNode{K, V, N}, key)::Pair{K, V} where {K, V, N}
-#     k, next = search(node, key)
-#     isa(next, V) ? (k => next) : drop(next, key)
-# end
 
 function Base.getindex(tree::B⁺Tree{K, V, N}, key) where {K, V, N}
     k, val = search(tree.root, key)
@@ -206,18 +196,76 @@ end
 
 Base.get(tree::B⁺Tree{K, V, N}, key)  where {K, V, N} = get(tree, key, nothing)
 
-function test_b⁺tree_key_order(tree)
+function Base.delete!(node::B⁺Internal{K, V, N}, key) where {K, V, N}
+    ks = keys(node)
+    i, k = indexkey(node, key)
+    (key < k) && (ks[i] = key)
+    nodes = values(node)
+    child = delete!(nodes[i], key)
+    (isvalid(child) || (length(node) == 1)) && return node
+
+    if (i == lastindex(ks))
+        if merge!(nodes[i - 1], child)
+            deleteat!(node, i)
+        else
+            ks[i] = first(keys(child))
+        end
+    else
+        if merge!(child, nodes[i + 1])
+            deleteat!(node, i + 1)
+        else
+            ks[i + 1] = first(keys(nodes[i + 1]))
+        end
+        ks[i] = first(keys(child))
+    end
+    node 
+end
+
+function Base.delete!(node::B⁺Child{K, V, N}, key) where {K, V, N} 
+    i, k = indexkey(node, key)
+    k == key && deleteat!(node, i)
+    node
+end
+
+function Base.delete!(tree::B⁺Tree{K, V, N}, key) where {K, V, N}
+    root = delete!(tree.root, key)
+    if length(root) == 1
+        child, = values(root)
+        isa(child, B⁺Node) && (tree.root = child)
+    end
+    tree 
+end
+
+function merge!(left, right)
+    left_diff = length(left) - minsize(left)
+    right_diff = length(right) - minsize(right)
+    if (left_diff == -1) && (right_diff > 0)
+        k, v = splice!(right, firstindex(keys(right)))
+        push!(left, v, k)
+        return false
+    elseif (right_diff == -1) && (left_diff > 0)
+        k, v = splice!(left, lastindex(keys(left)))
+        insert!(right, firstindex(keys(right)), v, k)
+        return false
+    end
+    append!(left, right)
+    return true
+end 
+
+function test_b⁺tree(tree)
     leaf_keys = keys(tree) |> collect
     @assert all(leaf_keys[2:end] .> leaf_keys[1:end-1])
 end
 
 function test_b⁺tree(tree, data)
-    test_b⁺tree_key_order(tree)
+    test_b⁺tree(tree)
+    root, children... = AbstractTrees.PreOrderDFS(tree.root)
+    @assert all(isvalid, children)
+    @assert order(root) >= length(root) >= min(2, length(data))
+
+
     @assert all((data[k] == v) for (k, v) in pairs(tree))
     @assert all((tree[k] == v) for (k, v) in pairs(data))
     @assert length(data) == length(tree)
-
-    root, nodes... = AbstractTrees.PreOrderDFS(tree.root)
-    @assert all(isvalid, nodes)
     true
 end

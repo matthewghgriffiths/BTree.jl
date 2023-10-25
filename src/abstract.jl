@@ -17,8 +17,13 @@ Base.isempty(node::AbstractBNode) = isempty(values(node))
 Base.iterate(node::AbstractBNode) = iterate(values(node))
 Base.eltype(node::AbstractBNode) = eltype(values(node))
 
-index(node::AbstractBNode, key) = index(keys(node), key)
-index(ks::Vector{K}, key::K) where K = searchsortedlast(@view(ks[2:end]), key) + 1
+@inline index(node::AbstractBNode, key) = index(keys(node), key)
+@inline index(ks::Vector{K}, key::K1) where {K, K1 <: K} = searchsortedlast(@view(ks[2:end]), key) + 1
+@inline indexkey(node::AbstractBNode, key) = indexkey(keys(node), key)
+@inline function indexkey(ks::Vector{K}, key::K1) where {K, K1 <: K} 
+    i = index(ks, key)
+    i => ks[i]
+end
 
 function Base.push!(node::AbstractBNode, value, key)
     push!(keys(node), key)
@@ -50,6 +55,23 @@ function Base.sizehint!(node::AbstractBNode, sz::Integer)
 end
 Base.getindex(node::B, slice::UnitRange{<:Integer}) where {B <: AbstractBNode} = B(keys(node)[slice], values(node)[slice])
 
+function Base.deleteat!(node::B, i) where {B <: AbstractBNode}
+    deleteat!(keys(node), i)
+    deleteat!(values(node), i)
+end
+
+
+
+function Base.append!(node::B, ks, vs) where {B <: AbstractBNode}
+    append!(keys(node), ks)
+    append!(values(node), vs)
+    node
+end
+Base.append!(left::B, right::B) where {B <: AbstractBNode} = append!(left, keys(right), values(right))
+Base.splice!(node::B, i) where {B <: AbstractBNode} = splice!(keys(node), i) => splice!(values(node), i)
+
+
+
 struct SplitNode{N<:AbstractBNode}
     node::N
     splitsize::Integer 
@@ -78,7 +100,7 @@ end
 function split_node(node::AbstractBNode, splitsize::Integer, maxsize::Integer)
     stop_index = lastindex(keys(node))
     stop = stop_index - maxsize + 1
-    nsplits = cld(length(node), minsize(node)) - 1
+    nsplits = fld(length(node), minsize(node))
     SplitNode(node, splitsize, maxsize, nsplits, stop, stop_index)
 end
 
