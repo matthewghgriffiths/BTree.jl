@@ -1,6 +1,7 @@
 module BTree
 
-import Base: insert!, keys, values, pairs, length, isempty, setindex!, eltype, getindex
+import Base: insert!, keys, values, pairs, length, isempty, setindex!, 
+    eltype, getindex, iterate
 # using DataStructures: MutableLinkedList
 import AbstractTrees
 using IterTools

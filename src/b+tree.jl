@@ -77,54 +77,30 @@ Base.keys(tree::B⁺Tree)   = Iterators.flatten(keys.(leaves(tree)))
 Base.values(tree::B⁺Tree) = Iterators.flatten(values.(leaves(tree)))
 Base.pairs(tree::B⁺Tree)  = Iterators.flatten(pairs.(leaves(tree)))
 
-function _update(node::B⁺Node, value, key)
+function setindex!(node::B⁺Internal{K, V, N}, value, key) where {K, V, N} 
     ks = keys(node)
-    vs = values(node)
-    if !ischild(node)
-        i = searchsortedlast(ks, key)
-        i0 = firstindex(ks)
-        if i < i0
-            ks[i0] = key 
-            i = i0
-        end 
-        left, nodes... = update(vs[i], value, key)
-        vs[i] = left
-        for (j, next) in enumerate(nodes)
-            insert!(node, i + j, first(keys(next)), next)
-        end
-    else
-        i = searchsortedfirst(ks, key)
-        if (isempty(ks) || i > lastindex(ks) || ks[i] != key)
-            insert!(node, i, key, value)
-        else
-            vs[i] = value 
-        end
+    nodes = values(node)
+    i = index(ks, key)
+    (key < ks[i]) && (ks[i] = key)
+    nodes[i], children... = split(setindex!(nodes[i], value, key))
+    for (j, childⱼ) in enumerate(children)
+        insert!(node, i + j, childⱼ, first(keys(childⱼ)))
     end
-    split(node)
+    node
 end
 
-function update(node::B⁺Node, value, key)
-    isempty(node) && return split(push!(node, key, value))
-
+function setindex!(node::B⁺Child{K, V, N}, value, key) where {K, V, N} 
+    isempty(node) && return push!(node, value, key)
     ks = keys(node)
     vs = values(node)
     i = index(ks, key)
     k = ks[i]
-    if !ischild(node)
-        (key < k) && (ks[i] = key)
-        left, nodes... = update(vs[i], value, key)
-        vs[i] = left
-        for (j, next) in enumerate(nodes)
-            insert!(node, i + j, first(keys(next)), next)
-        end
+    if k == key 
+        vs[i] = value 
     else
-        if k == key 
-            vs[i] = value 
-        else
-            insert!(node, i + (k < key), key, value)
-        end
+        insert!(node, i + (k < key), value, key)
     end
-    split(node)
+    node
 end
 
 function split(node::B⁺Node{K, V, N}, splitsize::Integer, maxsize::Integer) where {K, V, N}
@@ -133,17 +109,18 @@ function split(node::B⁺Node{K, V, N}, splitsize::Integer, maxsize::Integer) wh
     inds = eachindex(ks)
     stop_index = lastindex(inds)
     stop = stop_index - maxsize + 1
+    nsplits = cld(length(node), minsize(node)) - 1
     i = 1 
     nodes = B⁺Node{K, V, N}[]
-    sizehint!(node, cld(length(node), minsize(node)))
+    sizehint!(node, nsplits)
     while i < stop
         sel = i:i + splitsize - 1
-        push!(nodes, B⁺Node{N}(ks[sel], vs[sel]))
+        push!(nodes, node[sel])
         i += splitsize
     end
     if i < stop_index
         sel = i:stop_index
-        push!(nodes, B⁺Node{N}(ks[sel], vs[sel]))
+        push!(nodes, node[sel])
     end
     return nodes 
 end
@@ -154,15 +131,15 @@ function split(node::B⁺Node{K, V, N}) where {K, V, N}
 end
 
 function setindex!(tree::B⁺Tree, value, key)
-    nodes = update(tree.root, value, key)
+    node = setindex!(tree.root, value, key)
+    nodes = split(node)
     if length(nodes) == 1
-        tree.root = nodes[1]
+        tree.root, = nodes
     else
         tree.root = B⁺Node(nodes)
     end
     tree
 end
-
 
 function _search_nodes(key, node::AbstractBNode{K, V, N}) where {K, V, N}
     nodes = ()
