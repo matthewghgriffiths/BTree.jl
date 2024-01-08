@@ -11,22 +11,29 @@ struct B⁺Child{K, V, N} <: abstractB⁺Node{K, V, N}
 end
 B⁺Child{K, V, N}() where {K, V, N} = B⁺Child{N}(K[], V[])
 
+function B⁺Child{K, V, N}(k::AbstractVector{K}, v::AbstractVector{V}) where {K, V, N}
+    k = convert(Vector{K}, k)
+    v = convert(Vector{V}, v)
+    B⁺Child{K, V, N}(k, v)
+end
+
 struct B⁺Internal{K, V, N} <: abstractB⁺Node{K, V, N}
     keys::Vector{K}
-    values::Vector{Union{B⁺Internal{K, V, N}, B⁺Child{K, V, N}}}
-    B⁺Internal{K, V, N}(keys::Vector{V}, nodes::Vector{Union{B⁺Internal{K, V, N}, B⁺Child{K, V, N}}}) where 
+    values::Union{Vector{B⁺Internal{K, V, N}}, Vector{B⁺Child{K, V, N}}}
+    B⁺Internal{K, V, N}(keys::Vector{V}, nodes::Union{Vector{B⁺Internal{K, V, N}}, Vector{B⁺Child{K, V, N}}}) where 
         {K, V, N} = sizehint!(new{K, V, N}(keys, nodes), N + 1)
 end
 
 const B⁺Node{K, V, N} = Union{B⁺Internal{K, V, N}, B⁺Child{K, V, N}}
+const B⁺Nodes{K, V, N} = Union{AbstractVector{B⁺Internal{K, V, N}}, AbstractVector{B⁺Child{K, V, N}}, AbstractVector{<:B⁺Node{K, V, N}}}
 
-function B⁺Internal(keys::Vector, nodes::Vector{<:B⁺Node{K, V, N}}) where {K, V, N}
+function B⁺Internal(keys::AbstractVector, nodes::B⁺Nodes{K, V, N}) where {K, V, N}
     keys = convert(Vector{K}, keys)
-    nodes = convert(Vector{B⁺Node{K, V, N}}, nodes)
+    nodes = convert(Vector{typeof(first(nodes))}, nodes)
     B⁺Internal{K, V, N}(keys, nodes)
 end
-B⁺Internal(nodes::Vector{<:B⁺Node}) = B⁺Internal(first.(keys.(nodes)), nodes)
-B⁺Internal{N}(keys::Vector, nodes::Vector{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Internal(keys, nodes)
+B⁺Internal(nodes::AbstractVector{<:B⁺Node}) = B⁺Internal(first.(keys.(nodes)), nodes)
+B⁺Internal{N}(keys::AbstractVector, nodes::B⁺Nodes{K, V, N}) where {K, V, N} = B⁺Internal(keys, nodes)
 
 
 B⁺Node{K, V, N}() where {K, V, N} = B⁺Child{K, V, N}()
@@ -34,13 +41,11 @@ B⁺Node(::Type{K}, ::Type{V}, order::Integer) where {K, V} = B⁺Node{K, V, ord
 B⁺Node{K, V}(order::Integer) where {K, V} = B⁺Child{K, V, order}()
 
 B⁺Node(keys::Vector{K}, values::Vector{V}, order::Int) where {K, V} = B⁺Node{order}(keys, values) 
-
 B⁺Node{K, V, N}(keys::Vector{K}, values::Vector{V}) where {K, V, N} = B⁺Child{N}(keys, values)
 B⁺Node{N}(keys::Vector{K}, values::Vector{V}) where {K, V, N} = B⁺Child{N}(keys, values)
-
-B⁺Node{K, V, N}(keys::Vector{K}, values::Vector{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Internal{N}(keys, values)
-B⁺Node{N}(keys::Vector{K}, values::Vector{V}) where {K, V <: B⁺Node, N} = B⁺Internal{N}(keys, values)
-B⁺Node(nodes::Vector{<:B⁺Node}) = B⁺Internal(nodes)
+B⁺Node{K, V, N}(keys::AbstractVector{K}, values::AbstractVector{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Internal{N}(keys, values)
+B⁺Node{N}(keys::AbstractVector{K}, values::AbstractVector{V}) where {K, V <: B⁺Node, N} = B⁺Internal{N}(keys, values)
+B⁺Node(nodes::AbstractVector{<:B⁺Node}) = B⁺Internal(nodes)
 B⁺Node(nodes::Vararg{B⁺Node{K, V, N}, M}) where {K, V, N, M} = B⁺Node(collect(nodes))
 
 
@@ -53,6 +58,8 @@ ischild(node::B⁺Child) = true
 # AbstractTrees.NodeType(::Type{<:AbstractBNode}) = AbstractTrees.HasNodeType()
 # AbstractTrees.nodetype(::Type{<:AbstractBNode}) = AbstractBNode
 # AbstractTrees.NodeType(::Type{<:B⁺Node}) = AbstractTrees.HasNodeType()
+AbstractTrees.childrentype(::Type{<:AbstractBNode{K, V, N}}) where {K, V, N} = Vector{<:Union{AbstractBNode{K, V, N}, V}}
+AbstractTrees.childrentype(::Type{<:B⁺Internal{K, V, N}}) where {K, V, N} = Vector{B⁺Node{K, V, N}}
 AbstractTrees.nodetype(::Type{<:B⁺Node{K, V, N}}) where {K, V, N} = B⁺Node{K, V, N}
 
 for f in [:length, :isempty, :iterate, :eltype]
@@ -65,11 +72,21 @@ mutable struct B⁺Tree{K, V, N} <: abstractB⁺Tree{K, V, N}
     # leaves::MutableLinkedList{B⁺Node{K, V, N}}
 end
 
-function B⁺Tree{K, V}(order::Integer) where {K, V} 
-    root = B⁺Node{K, V, order}(K[], V[])
+B⁺Tree{K, V}(order::Integer) where {K, V} = B⁺Tree{K, V, order}()
+function B⁺Tree{K, V, N}() where {K, V, N} 
+    root = B⁺Node{K, V, N}(K[], V[])
     # leaves = MutableLinkedList{B⁺Node{K, V, order}}(root)
-    B⁺Tree{K, V, order}(root)
+    B⁺Tree{K, V, N}(root)
 end
+
+function B⁺Tree{N}(data::AbstractVector{Pair{K, V}}) where {K, V, N}
+    tree = B⁺Tree{K, V, N}()
+    for (k, v) in data
+        tree[k] = v 
+    end
+    tree 
+end
+
 length(tree::B⁺Tree) = sum(length, leaves(tree))
 
 leaves(tree::B⁺Tree) = AbstractTrees.Leaves(tree.root)
@@ -102,36 +119,28 @@ function setindex!(node::B⁺Child{K, V, N}, value, key) where {K, V, N}
     node
 end
 
-function split(node::B, splitsize::Integer, maxsize::Integer) where {B <: B⁺Node}
-    stop_index = lastindex(keys(node))
-    stop = stop_index - maxsize + 1
-    nsplits = fld(length(node), minsize(node))
-    # nodes = B[]
-    # sizehint!(node, nsplits)
-    nodes = Vector{B}(undef, nsplits - 1)
+function split(node::B, splitsize::Integer) where {B <: B⁺Node}
+    i0 = firstindex(keys(node))
+    iend = lastindex(keys(node))
+    nsplits = div(iend - i0 + 1, splitsize) - 1
+    nodes = Vector{B}(undef, nsplits)
 
-    i = firstindex(keys(node))
-    left = node[i:i + splitsize - 1]
-    i += splitsize
-    j = 1
-    while i < stop
-        nodes[j] = node[i:i + splitsize - 1]
-        i += splitsize
-        j += 1
+    i1 = i0 + splitsize - 1
+    left = indexat(node, i0:i1)
+    for j in 1:nsplits - 1
+        shift = j * splitsize
+        nodes[j] = indexat(node, i0 + shift: i1 + shift)
     end
-    if i < stop_index
-        nodes[j] = node[i:stop_index]
-    end
+    nodes[nsplits] = indexat(node, i0 + nsplits * splitsize:iend)
     return left, nodes 
 end
 
 function split(node::B) where {B <: B⁺Node}
-    # isover(node) || return B⁺Node{K, V, N}[node]
     isover(node) || return node, B[]
-    split(node, minsize(node), order(node))
+    split(node, minsize(node))
 end
 
-function setindex!(tree::B⁺Tree, value, key)
+function setindex!(tree::B, value, key) where B <: abstractB⁺Tree
     node= setindex!(tree.root, value, key)
     node, children = split(node)
     if isempty(children)
@@ -170,18 +179,26 @@ function search_nodes(key, nodes::Vararg{AbstractBNode{K, V, N}, M}) where {K, V
     # isa(next, V) ? ((keys(node)[i] => next), nodes) : search_nodes(key, nodes..., next)
 end
 
-function search(node::AbstractBNode{K, V, N}, key) where {K, V, N}
-    ks = keys(node)
-    i = index(ks, key)
-    next = values(node)[i]
-    isa(next, V) ? (ks[i] => next) : search(next, key)
+function index(node::B⁺Child, start, stop)
+    i0, k0 = indexkey(node, start)
+    i1 = index(node, stop)
+    return i0 + (start > k0):i1 - (stop < k0)
 end
+function index(node::B⁺Child, start, ::Nothing)
+    i0, k0 = indexkey(node, start)
+    return i0 + (start > k0):lastindex(node)
+end
+function index(node::B⁺Child, ::Nothing, stop)
+    i1 = index(node, stop)
+    return firstindex(node):i1
+end
+index(::B⁺Child, ::Nothing, ::Nothing) = Colon()
 
-function Base.getindex(node::AbstractBNode, key)
-    i = index(node, key)
-    keys(node)[i] == key || throw(KeyError(key))
-    values(node)[i]
-end
+Base.getindex(node::B⁺Child, range::UnitRange) = node[index(node, range)]
+Base.getindex(node::B⁺Child, start, stop) = values(node)[index(node, start, stop)]
+Base.view(node::B⁺Child, range::UnitRange) = view(node, first(range), last(range))
+Base.view(node::B⁺Child, start, stop) = view(values(node), index(node, start, stop))
+Base.view(node::B⁺Child, ::Colon) = values(node)
 
 function Base.getindex(tree::B⁺Tree{K, V, N}, key) where {K, V, N}
     k, val = search(tree.root, key)
@@ -228,6 +245,8 @@ function Base.delete!(node::B⁺Child{K, V, N}, key) where {K, V, N}
 end
 
 function Base.delete!(tree::B⁺Tree{K, V, N}, key) where {K, V, N}
+    isempty(tree) && return tree 
+
     root = delete!(tree.root, key)
     if length(root) == 1
         child, = values(root)
@@ -250,7 +269,30 @@ function merge!(left, right)
     end
     append!(left, right)
     return true
-end 
+end
+
+
+struct ChainedIterables{I<:NTuple}
+    iterables::I
+end
+
+ChainedIterables(iterables...) = ChainedIterables(iterables)
+
+
+
+
+
+slice(f::Function, node::B⁺Child, start, stop) = Ref(@view f(node)[index(node, start, stop)])
+function slice(f::Function, node, start, stop)
+    children = @view values(node)[index(node, start, stop)]
+    i0, i1 = firstindex(children), lastindex(children)
+    [
+        child2 for (i, child) in pairs(children) 
+        for child2 in slice(f, child, i==i0 ? start : nothing, i==i1 ? stop : nothing)
+    ]
+end
+slice(node, start, stop) = slice(values, node, start, stop)
+
 
 function test_b⁺tree(tree)
     leaf_keys = keys(tree) |> collect
