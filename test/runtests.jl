@@ -6,10 +6,10 @@ using Random
 
 @testset "B⁺Tree" begin
 	rng = MersenneTwister(1337)
-	n_keys = 500
+	n_keys = 10_000
 	kvs = Pair.(rand(rng, 1:n_keys, n_keys), rand(rng, 1:n_keys, n_keys))
 
-	tree_sizes = [11, 31, 128]
+	tree_sizes = [32, 128, 256]
 	for N in tree_sizes
 		tree =  BTree.B⁺Tree{Int, Int}(N)
 		data = Dict{Int, Int}()

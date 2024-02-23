@@ -157,13 +157,13 @@ end
 struct B⁺Node{K,V,N,B} <: abstractB⁺Node{K,V,N,B}
     keys::Vector{K}
     values::Vector{B}
-    B⁺Node{K,V,N,B}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = new{K,V,N,B}(k, v)
-    B⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = new{K,V,N,B}(k, v)
+    function B⁺Node{K,V,N,B}(k::Vector{K}, v::Vector{B}) where {K,V,N,B}
+        N < 5 && throw(ArgumentError("N=$N must be greater than 5"))
+        new{K,V,N,B}(k, v)
+    end
 end
 
-abstractB⁺Node{K,V,N}(nodes::AbstractVector{B}) where {K,V,N,B<:abstractB⁺Node{K,V,N}} = B(first.(keys.(nodes)), nodes)
-abstractB⁺Node(nodes::AbstractVector{B}) where {B<:abstractB⁺Node} = B(first.(keys.(nodes)), nodes)
-
+B⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = B⁺Node{K,V,N,B}(k, v)
 B⁺Node(nodes::AbstractVector{<:B⁺Node}) = B⁺Node(first.(keys.(nodes)), nodes)
 B⁺Node{K,V,N}(nodes::AbstractVector{<:B⁺Node}) where {K,V,N} = B⁺Node(first.(keys.(nodes)), nodes)
 
@@ -188,11 +188,16 @@ struct StableB⁺Node{K,V,N,B} <: abstractB⁺Node{K,V,N,B}
     keys::Vector{K}
     values::Union{Vector{V},Vector{StableB⁺Node{K,V,N}}}
 
-    StableB⁺Node{K,V,N,B}(k::Vector{K}, v::Vector{V}) where {K,V,N,B} = new{K,V,N,Union{V,StableB⁺Node{K,V,N}}}(k, v)
-    StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{V}) where {K,V,N} = new{K,V,N,Union{V,StableB⁺Node{K,V,N}}}(k, v)
-    StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = new{K,V,N,Union{V,StableB⁺Node{K,V,N}}}(k, convert(Vector{StableB⁺Node{K,V,N}}, v))
+    function StableB⁺Node{K,V,N,B}(k::Vector{K}, v::Vector{C}) where {K,V,N,B,C<:Union{V,StableB⁺Node{K,V,N}}}
+        N < 1 && throw(ArgumentError("N=$N must be greater than 1"))
+        new{K,V,N,Union{V,StableB⁺Node{K,V,N}}}(k, v)
+    end
 end
 const StableB⁺ChildNode{K,V,N} = Union{V,StableB⁺Node{K,V,N}}
+
+# StableB⁺Node{K,V,N,B}(args...) where {K,V,N,B} = StableB⁺Node{K,V,N}(args...)
+StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{V}) where {K,V,N} = StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(k, v)
+StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(k, convert(Vector{StableB⁺Node{K,V,N}}, v))
 
 function StableB⁺Node(keys::AbstractVector{K}, nodes::AbstractVector{<:abstractB⁺Node{K,V,N}}) where {K,V,N}
     keys = convert(Vector{K}, keys)
@@ -200,7 +205,6 @@ function StableB⁺Node(keys::AbstractVector{K}, nodes::AbstractVector{<:abstrac
     StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(keys, nodes)
 end
 
-StableB⁺Node{K,V,N,B}(args...) where {K,V,N,B} = StableB⁺Node{K,V,N}(args...)
 
 StableB⁺Node(node::B) where {K,V,N,B<:abstractB⁺Node{K,V,N}} = StableB⁺Node{K,V,N}(keys(node), values(node))
 StableB⁺Node{K,V,N}() where {K,V,N} = StableB⁺Node{K,V,N}(K[], V[])
