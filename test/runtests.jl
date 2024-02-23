@@ -9,9 +9,9 @@ using Random
 	n_keys = 500
 	kvs = Pair.(rand(rng, 1:n_keys, n_keys), rand(rng, 1:n_keys, n_keys))
 
-	tree_sizes = [2, 3, 11, 32]
+	tree_sizes = [11, 31, 128]
 	for N in tree_sizes
-		tree =  BTree.B⁺Tree{Int, Int}(10)
+		tree =  BTree.B⁺Tree{Int, Int}(N)
 		data = Dict{Int, Int}()
 		for (k, v) in kvs
 			tree[k] = v
