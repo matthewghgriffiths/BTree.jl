@@ -325,7 +325,7 @@ iteratestart(iter::DepthIterator{D,V}) where {D,V} = iteratestart(iter.node, Val
     if !isnothing(val_state)
         (val_state..., node, rest...)
     elseif !isempty(rest)
-        @inline node_rest = next_value(rest...)
+        node_rest = next_value(rest...)
         isnothing(node_rest) ? nothing : next_value(one(state), node_rest...)
     else
         nothing
