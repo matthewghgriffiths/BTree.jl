@@ -305,7 +305,7 @@ Base.IteratorEltype(::DepthIterator) = Base.HasEltype()
 end
 
 Base.iterate(iter::DepthIterator{D,V}) where {D,V} = splitfirst(iteratestart(iter.node, Val(D)))
-Base.iterate(::DepthIterator, state) = @inline splitfirst(next_value(state...))
+@inline Base.iterate(::DepthIterator, state) = splitfirst(next_value(state...))
 
 
 @generated function iteratestart(node, ::Val{D}=Val(depth(node))) where {D}
