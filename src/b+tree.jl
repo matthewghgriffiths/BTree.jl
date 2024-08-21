@@ -184,6 +184,20 @@ B⁺Node(keys::Vector{K}, values::Vector{V}, N::Integer) where {K,V} = B⁺Node{
 B⁺Node(nodes::Vararg{B}) where {B<:B⁺Node} = B⁺Node(collect(nodes))
 
 
+@generated function search(node, key)
+    next = :node 
+    k = :key
+    D = depth(node)
+    for i in 1:D
+        ks = :(keys($next))
+        i = :(index($ks, key))
+        next = :(values($next)[$i])
+        k = :(ks[$i])
+    end
+    :($k => $next)
+    next
+end
+
 struct StableB⁺Node{K,V,N,B} <: abstractB⁺Node{K,V,N,B}
     keys::Vector{K}
     values::Union{Vector{V},Vector{StableB⁺Node{K,V,N}}}
@@ -257,20 +271,11 @@ end
 function setindex!(tree::B, value, key) where {K,V,N,W,B<:abstractB⁺Tree{K,V,N,W}}
     node = setindex!(tree.root, value, key)
     node, children = split!(node)
-    if isnothing(children)
-        tree.root = node
-    else
+    if !isnothing(children)
         tree.root = W(vcat(node, children))
     end
     tree
 end
-
-
-struct ChainedIterables{I<:NTuple}
-    iterables::I
-end
-
-ChainedIterables(iterables...) = ChainedIterables(iterables)
 
 slice(f::Function, node::B⁺Child, start, stop) = Ref(@view f(node)[index(node, start, stop)])
 function slice(f::Function, node, start, stop)
@@ -315,7 +320,7 @@ Base.iterate(::DepthIterator, state) = @inline splitfirst(next_value(state...))
 end
 iteratestart(iter::DepthIterator{D,V}) where {D,V} = iteratestart(iter.node, Val(D))
 
-@inline function next_value(state, node, rest...)
+@inline function next_value(state, node, rest::Vararg{Any, N}) where {N}
     val_state = iterate(values(node), state)
     if !isnothing(val_state)
         (val_state..., node, rest...)

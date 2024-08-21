@@ -118,7 +118,7 @@ indexat(node::B, ind) where {B<:AbstractBNode} = keys(node)[ind] => values(node)
 indexat(node::B, slice::UnitRange{<:Integer}) where {B<:AbstractBNode} = B(keys(node)[slice], values(node)[slice])
 
 getnested(node) = node
-getnested(node::AbstractBNode, i, inds...) = getnested(values(node)[i], inds...)
+getnested(node::AbstractBNode, i, inds::Vararg{Any, N}) where N = getnested(values(node)[i], inds...)
 
 function Base.deleteat!(node::B, i) where {B<:AbstractBNode}
     deleteat!(keys(node), i)
@@ -224,7 +224,7 @@ function Base.merge!(tree::AbstractBTree, data::AbstractVector)
     end
     tree
 end
-function Base.merge!(tree::AbstractBTree, data::Pair...)
+function Base.merge!(tree::AbstractBTree, data::Vararg{Pair, N}) where N
     for (i, v) in data
         tree[i] = v
     end
