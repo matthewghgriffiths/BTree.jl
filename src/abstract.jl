@@ -46,7 +46,7 @@ ChildType(::Type{<:AbstractBNode{K,V,N,W}}, ::Val{D}) where {K,V,N,W,D} =
 ChildType(::Type{T}, D::Int) where {K,V,N,W,T<:AbstractBNode{K,V,N,W}} = ChildType(T, Val(D))
 
 @inline index(node::AbstractBNode, range::UnitRange) = index(keys(node), first(range), last(range))
-@inline index(node::AbstractBNode, ks...) = index(keys(node), ks...)
+@inline index(node::AbstractBNode, ks::Vararg{Any, N}) where {N} = index(keys(node), ks...)
 @inline index(ks::AbstractVector, range::AbstractRange) = index(ks, first(range), last(range))
 @inline index(ks::AbstractVector, key1, key2) = index(ks, key1):index(ks, key2)
 @inline index(ks::AbstractVector, key1, ::Nothing) = index(ks, key1):lastindex(ks)
@@ -67,7 +67,7 @@ end
     k => v
 end
 
-function search(node::AbstractBNode{K,V,N,B}, key)::Pair{K,V} where {K,V,N,B}
+@inline function search(node::AbstractBNode{K,V,N,B}, key)::Pair{K,V} where {K,V,N,B}
     ks = keys(node)
     i = index(ks, key)
     next = values(node)[i]
@@ -84,7 +84,7 @@ function Base.getindex(node::AbstractBNode, key)
 end
 # Base.getindex(node::AbstractBNode, range::UnitRange) = node[index(node, range)]
 Base.getindex(node::AbstractBNode, start, stop) = values(node)[index(node, start, stop)]
-Base.view(node::AbstractBNode, inds...) = view(values(node), index(node, inds...))
+Base.view(node::AbstractBNode, inds::Vararg{Any, N}) where {N} = view(values(node), index(node, inds...))
 Base.view(node::AbstractBNode, range::UnitRange) = view(node, first(range), last(range))
 Base.view(node::AbstractBNode, ::Colon) = values(node)
 
@@ -200,9 +200,9 @@ Base.pairs(tree::AbstractBTree) = Iterators.flatten(pairs.(leaves(tree)))
 search(tree::AbstractBTree, key) = search(root(tree), key)
 
 function Base.getindex(tree::AbstractBTree{K,V,N}, key) where {K,V,N}
-    k, val = search(tree.root, key)
-    k == key || throw(KeyError(key))
-    val
+    kval = search(tree.root, key)
+    kval.first == key || throw(KeyError(key))
+    kval.second
 end
 
 function Base.get(tree::AbstractBTree{K,V,N}, key, default) where {K,V,N}

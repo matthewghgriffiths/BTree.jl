@@ -9,8 +9,8 @@ isinternal(::abstractB⁺Node{K,V,N,W}) where {K,V,N,W} = W <: abstractB⁺Node{
 ischild(node) = !isinternal(node)
 
 
-Base.setindex!(node::abstractB⁺Node, value, key) = isinternal(node) ?
-                                                   setinternalindex!(node, value, key) : setchildindex!(node, value, key)
+Base.setindex!(node::abstractB⁺Node, value, key) = 
+    isinternal(node) ? setinternalindex!(node, value, key) : setchildindex!(node, value, key)
 
 function setinternalindex!(node::abstractB⁺Node, value, key)
     ks = keys(node)
@@ -18,9 +18,10 @@ function setinternalindex!(node::abstractB⁺Node, value, key)
     (key < k) && (ks[i] = key)
     nodes = values(node)
     child = setindex!(nodes[i], value, key)
-    nodes[i], children = split!(child)
-    if !isnothing(children)
-        for (j, childⱼ) in enumerate(children)
+    if isover(child)
+        children = split!(child)
+        nodes[i] = children[1]
+        for (j, childⱼ) in enumerate(@view children[2:end])
             insert!(node, i + j, childⱼ, nodekey(childⱼ))
         end
     end
@@ -42,8 +43,8 @@ function setchildindex!(node::abstractB⁺Node, value, key)
 end
 
 
-Base.delete!(node::abstractB⁺Node, key) = isinternal(node) ?
-                                          deleteinternal!(node, key) : deletechild!(node, key)
+Base.delete!(node::abstractB⁺Node, key) = 
+    isinternal(node) ? deleteinternal!(node, key) : deletechild!(node, key)
 
 function deleteinternal!(node::abstractB⁺Node, key)
     ks = keys(node)
@@ -78,8 +79,6 @@ function deletechild!(node::abstractB⁺Node, key)
 end
 
 
-
-
 function index(node::ChildBNode, start, stop)
     i0, k0 = indexkey(node, start)
     i1 = index(node, stop)
@@ -103,44 +102,57 @@ Base.view(node::ChildBNode, ::Colon) = values(node)
 
 aftersplit!(left, right) = right
 
-function split!(node::B, splitsize::Integer) where {B<:abstractB⁺Node}
+function split!(node::B, splitsize=minsize(node)) where {B<:abstractB⁺Node}
     i0 = firstindex(keys(node))
     i1 = i0 + splitsize - 1
     iend = lastindex(keys(node))
-    nsplits = div(iend - i0 + 1, splitsize) - 1
-
-    nsplits == 0 && return node, nothing
+    nsplits = fld(iend - i0 + 1, splitsize)
 
     nodes = Vector{B}(undef, nsplits)
-    i1 = i0 + splitsize - 1
-    left = indexat(node, i0:i1)
+    left = node 
+    # left = nodes[1] = indexat(node, i0:i1)
     for j in 1:nsplits-1
-        shift = j * splitsize
-        left = nodes[j] = aftersplit!(left, indexat(node, i0+shift:i1+shift))
+        left = nodes[j] = aftersplit!(left, indexat(node, i0:i1))
+        i0, i1 = i0 + splitsize, i1 + splitsize
     end
-    nodes[nsplits] = aftersplit!(left, indexat(node, i0+nsplits*splitsize:iend))
-    return left, nodes
+    nodes[nsplits] = aftersplit!(left, indexat(node, i0:iend))
+    return nodes
 end
 
+# @generated function searchB⁺(node::abstractB⁺Node, key)
+#     n = depth(node)
+#     next = :node
+#     k = :key
+#     for _ in 1:n
+#         ks = :(keys($next))
+#         vs = :(values($next))
+#         j = :(max(searchsortedlast($ks, key), 1))
+#         next = :($vs[$j])
+#         k = :($ks[$j])
+#     end
+#     :($k => $next)
+# end
 
-function split!(node::abstractB⁺Node)
-    isover(node) || return node, nothing
-    split!(node, minsize(node))
-end
+# function drop(node::BTree.abstractB⁺Node, key)
+#     ks = keys(node)
+#     i = index(ks, key)
+# 	values(node)[i]
+# end
 
-@generated function drop(node, key)
-    n = depth(node)
-    next = :node
-    k = :key
-    for _ in 1:n
-        ks = :(keys($next))
-        vs = :(values($next))
-        j = :(max(searchsortedlast($ks, key), 1))
-        next = :($vs[$j])
-        k = :($ks[$j])
-    end
-    :($k => $next)
-end
+# function searchchild(node::ChildBNode, key)
+#     ks = keys(node)
+#     i = index(ks, key)
+# 	ks[i] => values(node)[i]
+# end
+
+# @generated function dropdown(node::B, key) where {K,V,N,W,B <: BTree.abstractB⁺Node{K,V,N,W}}
+# 	child = :node
+# 	while W <: BTree.abstractB⁺Node
+# 		child = :(drop($child, key))
+# 		W = W.parameters[4]
+# 	end
+# 	:(searchchild($child, key))
+# end
 
 # @generated function descend(node::abstractB⁺Node) where B
 #     C = B
@@ -163,9 +175,12 @@ struct B⁺Node{K,V,N,B} <: abstractB⁺Node{K,V,N,B}
     end
 end
 
-B⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = B⁺Node{K,V,N,B}(k, v)
-B⁺Node(nodes::AbstractVector{<:B⁺Node}) = B⁺Node(first.(keys.(nodes)), nodes)
-B⁺Node{K,V,N}(nodes::AbstractVector{<:B⁺Node}) where {K,V,N} = B⁺Node(first.(keys.(nodes)), nodes)
+B⁺Node{K,V,N}(k::AbstractVector{K}, v::AbstractVector{B}) where {K,V,N,B} = B⁺Node{K,V,N,B}(convert(Vector{K}, k), convert(Vector{B}, v))
+B⁺Node(nodes::C) where {K,V,N,B<:B⁺Node{K,V,N},C<:AbstractVector{B}} = B⁺Node{K,V,N}(nodes)
+B⁺Node{K,V,N}(nodes::C) where {K,V,N,B<:B⁺Node{K,V,N},C<:AbstractVector{B}} = B⁺Node(
+    K[first(keys(node)) for node in nodes],
+    convert(Vector{B}, nodes)
+)
 
 const B⁺Child{K,V,N,B} = B⁺Node{K,V,N,B} where {K,V<:B,N,B<:V}
 const B⁺Internal{K,V,N,B} = B⁺Node{K,V,N,B} where {K,V,N,B<:abstractB⁺Node}
@@ -198,38 +213,38 @@ B⁺Node(nodes::Vararg{B}) where {B<:B⁺Node} = B⁺Node(collect(nodes))
     next
 end
 
-struct StableB⁺Node{K,V,N,B} <: abstractB⁺Node{K,V,N,B}
-    keys::Vector{K}
-    values::Union{Vector{V},Vector{StableB⁺Node{K,V,N}}}
+# struct StableB⁺Node{K,V,N,B} <: abstractB⁺Node{K,V,N,B}
+#     keys::Vector{K}
+#     values::Union{Vector{V},Vector{StableB⁺Node{K,V,N}}}
 
-    function StableB⁺Node{K,V,N,B}(k::Vector{K}, v::Vector{C}) where {K,V,N,B,C<:Union{V,StableB⁺Node{K,V,N}}}
-        N < 1 && throw(ArgumentError("N=$N must be greater than 1"))
-        new{K,V,N,Union{V,StableB⁺Node{K,V,N}}}(k, v)
-    end
-end
-const StableB⁺ChildNode{K,V,N} = Union{V,StableB⁺Node{K,V,N}}
+#     function StableB⁺Node{K,V,N,B}(k::Vector{K}, v::Vector{C}) where {K,V,N,B,C<:Union{V,StableB⁺Node{K,V,N}}}
+#         N < 1 && throw(ArgumentError("N=$N must be greater than 1"))
+#         new{K,V,N,Union{V,StableB⁺Node{K,V,N}}}(k, v)
+#     end
+# end
+# const StableB⁺ChildNode{K,V,N} = Union{V,StableB⁺Node{K,V,N}}
 
-# StableB⁺Node{K,V,N,B}(args...) where {K,V,N,B} = StableB⁺Node{K,V,N}(args...)
-StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{V}) where {K,V,N} = StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(k, v)
-StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(k, convert(Vector{StableB⁺Node{K,V,N}}, v))
+# # StableB⁺Node{K,V,N,B}(args...) where {K,V,N,B} = StableB⁺Node{K,V,N}(args...)
+# StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{V}) where {K,V,N} = StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(k, v)
+# StableB⁺Node{K,V,N}(k::Vector{K}, v::Vector{B}) where {K,V,N,B} = StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(k, convert(Vector{StableB⁺Node{K,V,N}}, v))
 
-function StableB⁺Node(keys::AbstractVector{K}, nodes::AbstractVector{<:abstractB⁺Node{K,V,N}}) where {K,V,N}
-    keys = convert(Vector{K}, keys)
-    nodes = convert(Vector{StableB⁺Node{K,V,N}}, nodes)
-    StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(keys, nodes)
-end
+# function StableB⁺Node(keys::AbstractVector{K}, nodes::AbstractVector{<:abstractB⁺Node{K,V,N}}) where {K,V,N}
+#     keys = convert(Vector{K}, keys)
+#     nodes = convert(Vector{StableB⁺Node{K,V,N}}, nodes)
+#     StableB⁺Node{K,V,N,StableB⁺ChildNode{K,V,N}}(keys, nodes)
+# end
 
 
-StableB⁺Node(node::B) where {K,V,N,B<:abstractB⁺Node{K,V,N}} = StableB⁺Node{K,V,N}(keys(node), values(node))
-StableB⁺Node{K,V,N}() where {K,V,N} = StableB⁺Node{K,V,N}(K[], V[])
-StableB⁺Node{K,V}(N::Integer) where {K,V} = StableB⁺Node{K,V,N}()
-StableB⁺Node(keys::Vector{K}, values::Vector{V}, order::Integer) where {K,V} = StableB⁺Node{K,V,order}(keys, values)
+# StableB⁺Node(node::B) where {K,V,N,B<:abstractB⁺Node{K,V,N}} = StableB⁺Node{K,V,N}(keys(node), values(node))
+# StableB⁺Node{K,V,N}() where {K,V,N} = StableB⁺Node{K,V,N}(K[], V[])
+# StableB⁺Node{K,V}(N::Integer) where {K,V} = StableB⁺Node{K,V,N}()
+# StableB⁺Node(keys::Vector{K}, values::Vector{V}, order::Integer) where {K,V} = StableB⁺Node{K,V,order}(keys, values)
 
-StableB⁺Node(nodes::AbstractVector{B}) where {K,V,N,B<:StableB⁺Node{K,V,N}} = StableB⁺Node{K,V,N}(nodes)
-StableB⁺Node{K,V,N,B}(nodes::AbstractVector{<:StableB⁺Node}) where {K,V,N,B} = StableB⁺Node{K,V,N}(nodes)
-StableB⁺Node{K,V,N}(nodes::AbstractVector{<:StableB⁺Node}) where {K,V,N} = StableB⁺Node(first.(keys.(nodes)), nodes)
+# StableB⁺Node(nodes::AbstractVector{B}) where {K,V,N,B<:StableB⁺Node{K,V,N}} = StableB⁺Node{K,V,N}(nodes)
+# StableB⁺Node{K,V,N,B}(nodes::AbstractVector{<:StableB⁺Node}) where {K,V,N,B} = StableB⁺Node{K,V,N}(nodes)
+# StableB⁺Node{K,V,N}(nodes::AbstractVector{<:StableB⁺Node}) where {K,V,N} = StableB⁺Node(first.(keys.(nodes)), nodes)
 
-isinternal(node::StableB⁺Node) = eltype(values(node)) <: abstractB⁺Node
+# isinternal(node::StableB⁺Node) = eltype(values(node)) <: abstractB⁺Node
 
 # isinternal(node::B⁺Internal) = true
 # isinternal(node::B⁺Child) = false
@@ -245,7 +260,6 @@ isinternal(node::StableB⁺Node) = eltype(values(node)) <: abstractB⁺Node
 
 mutable struct B⁺Tree{K,V,N,B<:abstractB⁺Node{K,V,N}} <: abstractB⁺Tree{K,V,N,B}
     root::B
-    # leaves::MutableLinkedList{B⁺Node{K, V, N}}
     B⁺Tree{K,V,N,B}(root) where {K,V,N,B} = B⁺Tree(root)
     function B⁺Tree(root::B) where {K,V,N,B<:abstractB⁺Node{K,V,N}}
         W = B.name.wrapper{K,V,N}
@@ -256,11 +270,12 @@ end
 B⁺Tree{K,V}(order::Integer) where {K,V} = B⁺Tree{K,V,order}()
 function B⁺Tree{K,V,N}() where {K,V,N}
     root = B⁺Node{K,V,N,V}(K[], V[])
-    # leaves = MutableLinkedList{B⁺Node{K, V, order}}(root)
     B⁺Tree{K,V,N,B⁺Node{K,V,N}}(root)
 end
 
-function B⁺Tree{N}(data::AbstractVector{Pair{K,V}}) where {K,V,N}
+B⁺Tree{N}(data::AbstractVector{Pair{K,V}}) where {K,V,N} = B⁺Tree{K,V,N}(data) 
+
+function B⁺Tree{K,V,N}(data::AbstractVector{Pair{K1,V1}}) where {K,V,N,K1<:K,V1<:V}
     tree = B⁺Tree{K,V,N}()
     for (k, v) in data
         tree[k] = v
@@ -270,9 +285,8 @@ end
 
 function setindex!(tree::B, value, key) where {K,V,N,W,B<:abstractB⁺Tree{K,V,N,W}}
     node = setindex!(tree.root, value, key)
-    node, children = split!(node)
-    if !isnothing(children)
-        tree.root = W(vcat(node, children))
+    if isover(node)
+        tree.root = W(split!(node))
     end
     tree
 end
