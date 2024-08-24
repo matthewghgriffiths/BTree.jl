@@ -9,7 +9,7 @@ using Random
 	n_keys = 1000
 	kvs = Pair.(rand(rng, 1:n_keys, n_keys), rand(rng, 1:n_keys, n_keys))
 
-	tree_sizes = [31, 128, 256]
+	tree_sizes = [5, 31, 128, 256]
 	for N in tree_sizes
 		tree =  BTree.B⁺Tree{Int, Int}(N)
 		data = Dict{Int, Int}()
